@@ -12,6 +12,7 @@ import argparse
 import csv
 import datetime as dt
 import logging
+import random
 import time
 from pathlib import Path
 from typing import Dict, Iterable, Iterator, List, Optional, Tuple
@@ -45,6 +46,19 @@ def parse_args() -> argparse.Namespace:
         default=30,
         help="Window size (in days) for each request. Smaller windows reduce pagination.",
     )
+    parser.add_argument(
+        "--sample-size",
+        type=int,
+        default=None,
+        help="Optional number of CVEs to sample before writing the CSV.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="RNG seed used when sampling.",
+    )
+    
     return parser.parse_args()
 
 
@@ -177,8 +191,17 @@ def main() -> None:
     if not collected:
         raise SystemExit("No CVEs collected – check parameters or API availability.")
 
-    LOGGER.info("Collected %s unique CVEs. Writing %s", len(collected), args.output)
-    write_csv(collected.values(), args.output)
+    records = list(collected.values())
+    if args.sample_size is not None and args.sample_size < len(records):
+        random.seed(args.seed)
+        records = random.sample(records, args.sample_size)
+        LOGGER.info(
+            "Sampling %s CVEs out of %s collected (seed=%s)", args.sample_size, len(collected), args.seed
+        )
+    LOGGER.info("Collected %s unique CVEs. Writing %s", len(records), args.output)
+    write_csv(records, args.output)
+
+
     LOGGER.info("Done.")
 
 
