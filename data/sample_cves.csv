@@ -1,0 +1,21 @@
+description,cvss_score
+"Buffer overflow in remote admin service allows arbitrary code execution",9.8
+"SQL injection in reporting module exposes customer records",7.5
+"Improper input validation leaks partial stack traces",5.5
+"Denial of service via crafted packet sequence",7.1
+"Privilege escalation through setuid helper misconfiguration",8.2
+"Cross-site scripting in help page",5.0
+"Unauthorized access via weak default credentials",6.3
+"TLS configuration supports deprecated cipher suites",4.3
+"Information disclosure in verbose debug endpoint",4.8
+"UI alignment issue on settings panel",2.1
+"Typo in about dialog",1.0
+"Logging failure may omit audit events",6.0
+"Kernel heap overflow reachable from guest VM",9.1
+"Heap corruption during image parsing",8.8
+"Sensitive data exposure when exporting CSV",6.7
+"Local denial of service via malformed configuration file",4.5
+"Firmware buffer overflow allowing persistent implant",10.0
+"Unbounded recursion leads to watchdog reset",7.3
+"Broken access control allows viewing other tenants invoices",8.0
+"Out-of-bounds read reveals memory contents",5.8
