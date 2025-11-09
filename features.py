@@ -48,6 +48,8 @@ TRAIN_RATIO = 0.8
 DEFAULT_SEED = 42
 DEFAULT_LAPLACE = 1.0
 DEFAULT_TOP_K = 10
+DEFAULT_FETCH_DELAY = 0.6
+DEFAULT_FETCH_WINDOW_DAYS = 30
 
 
 @dataclass
@@ -398,25 +400,77 @@ def print_top_words(model: NaiveBayesModel, top_k: int) -> None:
         print(f"  {label}: {terms}")
 
 
-def handle_train(args: argparse.Namespace) -> None:
-    data_path = Path(args.data)
+def train_pipeline(
+    data_path: Path,
+    model_path: Path,
+    *,
+    seed: int,
+    laplace: float,
+    top_k: int,
+) -> NaiveBayesModel:
     records, total = load_dataset(data_path)
     if not records:
-        raise SystemExit("Dataset did not contain any usable CVE entries.")
+        raise ValueError(f"Dataset did not contain any usable CVE entries: {data_path}")
     documents, skipped = build_documents(records)
-    print(
-        f"Loaded {len(records)} labeled CVEs out of {total} rows from {data_path}."
-    )
+    print(f"Loaded {len(records)} labeled CVEs out of {total} rows from {data_path}.")
     if skipped:
         print(f"Skipped {skipped} entries with empty vocab after preprocessing.")
-    train_docs, test_docs = stratified_split(documents, train_ratio=TRAIN_RATIO, seed=args.seed)
+    train_docs, test_docs = stratified_split(documents, train_ratio=TRAIN_RATIO, seed=seed)
     print(f"Training samples: {len(train_docs)}, test samples: {len(test_docs)}")
-    model = train_classifier(train_docs, laplace=args.laplace)
+    model = train_classifier(train_docs, laplace=laplace)
     accuracy, metrics, confusion = evaluate_model(model, test_docs)
     print_metrics(accuracy, metrics, confusion)
-    print_top_words(model, top_k=args.top_k)
-    model.save(Path(args.model_path))
-    print(f"\nModel saved to {args.model_path}")
+    print_top_words(model, top_k=top_k)
+    model.save(model_path)
+    print(f"\nModel saved to {model_path}")
+    return model
+
+
+def handle_train(args: argparse.Namespace) -> None:
+    try:
+        train_pipeline(
+            data_path=Path(args.data),
+            model_path=Path(args.model_path),
+            seed=args.seed,
+            laplace=args.laplace,
+            top_k=args.top_k,
+        )
+    except Exception as exc:
+        raise SystemExit(str(exc))
+
+
+def handle_fetch_train(args: argparse.Namespace) -> None:
+    try:
+        import fetch_nvd  # Local import to avoid hard dependency when unused.
+    except ImportError as exc:  # pragma: no cover - import failure path
+        raise SystemExit(f"fetch_nvd module unavailable: {exc}")
+
+    output_path = Path(args.output)
+    print(
+        f"Fetching CVEs from NVD ({args.start_year}-{args.end_year}) into {output_path}..."
+    )
+    try:
+        total = fetch_nvd.fetch_cves_to_csv(
+            start_year=args.start_year,
+            end_year=args.end_year,
+            output_path=output_path,
+            api_key=args.api_key,
+            delay=args.delay,
+            window_days=args.window_days,
+            sample_size=args.sample_size,
+            seed=args.fetch_seed,
+        )
+    except Exception as exc:
+        raise SystemExit(f"Failed to fetch CVEs: {exc}")
+
+    print(f"Fetched {total} CVEs. Starting training phase...\n")
+    train_pipeline(
+        data_path=output_path,
+        model_path=Path(args.model_path),
+        seed=args.seed,
+        laplace=args.laplace,
+        top_k=args.top_k,
+    )
 
 
 def handle_predict(args: argparse.Namespace) -> None:
@@ -470,6 +524,67 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Path to a trained model JSON file.",
     )
     predict_parser.set_defaults(func=handle_predict)
+
+    fetch_train_parser = subparsers.add_parser(
+        "fetch-train",
+        help="Fetch CVEs from the NVD API and immediately train the classifier.",
+    )
+    fetch_train_parser.add_argument("--start-year", type=int, required=True, help="First year to download.")
+    fetch_train_parser.add_argument("--end-year", type=int, required=True, help="Last year to download.")
+    fetch_train_parser.add_argument(
+        "--output",
+        required=True,
+        help="Destination CSV for fetched CVEs (reused by the training step).",
+    )
+    fetch_train_parser.add_argument("--api-key", help="Optional NVD API key for higher rate limits.")
+    fetch_train_parser.add_argument(
+        "--delay",
+        type=float,
+        default=DEFAULT_FETCH_DELAY,
+        help="Delay between NVD requests (seconds).",
+    )
+    fetch_train_parser.add_argument(
+        "--window-days",
+        type=int,
+        default=DEFAULT_FETCH_WINDOW_DAYS,
+        help="Window size (days) for each NVD request window.",
+    )
+    fetch_train_parser.add_argument(
+        "--sample-size",
+        type=int,
+        default=None,
+        help="Optionally down-sample fetched CVEs before training.",
+    )
+    fetch_train_parser.add_argument(
+        "--fetch-seed",
+        type=int,
+        default=DEFAULT_SEED,
+        help="RNG seed when sampling the fetched dataset.",
+    )
+    fetch_train_parser.add_argument(
+        "--model-path",
+        default="models/cve_nb.json",
+        help="Where to store the trained model (JSON).",
+    )
+    fetch_train_parser.add_argument(
+        "--seed",
+        type=int,
+        default=DEFAULT_SEED,
+        help="Random seed for the train/test split.",
+    )
+    fetch_train_parser.add_argument(
+        "--laplace",
+        type=float,
+        default=DEFAULT_LAPLACE,
+        help="Laplace smoothing applied to token likelihoods.",
+    )
+    fetch_train_parser.add_argument(
+        "--top-k",
+        type=int,
+        default=DEFAULT_TOP_K,
+        help="Number of indicative tokens to print per class.",
+    )
+    fetch_train_parser.set_defaults(func=handle_fetch_train)
 
     return parser
 

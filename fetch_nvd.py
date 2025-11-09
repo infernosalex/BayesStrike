@@ -161,50 +161,77 @@ def write_csv(records: Iterable[Dict[str, str]], output_path: Path) -> None:
             writer.writerow(record)
 
 
-def main() -> None:
-    args = parse_args()
-    if args.end_year < args.start_year:
-        raise SystemExit("end-year must be >= start-year")
+def fetch_cves_to_csv(
+    start_year: int,
+    end_year: int,
+    output_path: Path,
+    *,
+    api_key: Optional[str] = None,
+    delay: float = DEFAULT_DELAY,
+    window_days: int = 30,
+    sample_size: Optional[int] = None,
+    seed: int = 42,
+) -> int:
+    """Programmatically fetch CVEs and persist them as CSV.
 
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    session = build_session(args.api_key)
+    Returns the number of written rows.
+    """
 
+    if end_year < start_year:
+        raise ValueError("end_year must be >= start_year")
+
+    session = build_session(api_key)
     collected: Dict[str, Dict[str, str]] = {}
-    for year in range(args.start_year, args.end_year + 1):
+    for year in range(start_year, end_year + 1):
         year_start = dt.datetime(year, 1, 1)
         year_end = dt.datetime(year + 1, 1, 1)
         LOGGER.info("Fetching CVEs for %s", year)
-        for window_start, window_end in daterange(year_start, year_end, args.window_days):
+        for window_start, window_end in daterange(year_start, year_end, window_days):
             try:
-                batch = fetch_range(session, window_start, window_end, delay=args.delay)
+                batch = fetch_range(session, window_start, window_end, delay=delay)
             except Exception as exc:  # pragma: no cover - network failure
                 LOGGER.error("Failed to fetch %s – %s", window_start.date(), exc)
-                time.sleep(args.delay * 2)
+                time.sleep(delay * 2)
                 continue
             for entry in batch:
                 record = extract_record(entry)
                 if record is None:
                     continue
                 collected[record["cve_id"]] = record
-            time.sleep(args.delay)
+            time.sleep(delay)
 
     if not collected:
-        raise SystemExit("No CVEs collected – check parameters or API availability.")
+        raise RuntimeError("No CVEs collected – check parameters or API availability.")
 
     records = list(collected.values())
-    if args.sample_size is not None and args.sample_size < len(records):
-        random.seed(args.seed)
-        records = random.sample(records, args.sample_size)
-        LOGGER.info(
-            "Sampling %s CVEs out of %s collected (seed=%s)", args.sample_size, len(collected), args.seed
+    if sample_size is not None and sample_size < len(records):
+        random.seed(seed)
+        records = random.sample(records, sample_size)
+        LOGGER.info("Sampling %s CVEs out of %s collected (seed=%s)", sample_size, len(collected), seed)
+    LOGGER.info("Collected %s unique CVEs. Writing %s", len(records), output_path)
+    write_csv(records, output_path)
+    return len(records)
+
+
+def main() -> None:
+    args = parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    try:
+        total = fetch_cves_to_csv(
+            start_year=args.start_year,
+            end_year=args.end_year,
+            output_path=args.output,
+            api_key=args.api_key,
+            delay=args.delay,
+            window_days=args.window_days,
+            sample_size=args.sample_size,
+            seed=args.seed,
         )
-    LOGGER.info("Collected %s unique CVEs. Writing %s", len(records), args.output)
-    write_csv(records, args.output)
+    except Exception as exc:  # pragma: no cover - CLI surface
+        raise SystemExit(str(exc))
 
-
-    LOGGER.info("Done.")
+    LOGGER.info("Done. Wrote %s rows to %s", total, args.output)
 
 
 if __name__ == "__main__":
     main()
-

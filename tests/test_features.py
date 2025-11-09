@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import csv
+import io
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 
 import features
@@ -117,6 +119,39 @@ class StratifiedSplitTests(unittest.TestCase):
             test_count = sum(1 for doc in test if doc.label == label)
             self.assertGreater(train_count, 0, msg=f"missing {label} in train split")
             self.assertGreater(test_count, 0, msg=f"missing {label} in test split")
+
+
+class TrainingPipelineTests(unittest.TestCase):
+    def test_train_pipeline_from_csv_file(self) -> None:
+        rows = [
+            ("Critical overflow allows code execution", "CRITICAL"),
+            ("Critical kernel flaw enables RCE", "CRITICAL"),
+            ("High privilege escalation in kernel module", "HIGH"),
+            ("High buffer overflow leaks credentials", "HIGH"),
+            ("Medium info leak via verbose debug", "MEDIUM"),
+            ("Medium default credentials allow read access", "MEDIUM"),
+            ("Low cosmetic issue misplaces tooltip", "LOW"),
+            ("Low typo in about page", "LOW"),
+        ]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            data_path = Path(tmp_dir) / "cves.csv"
+            with data_path.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(["description", "severity"])
+                writer.writerows(rows)
+            model_path = Path(tmp_dir) / "model.json"
+
+            with redirect_stdout(io.StringIO()):
+                model = features.train_pipeline(
+                    data_path=data_path,
+                    model_path=model_path,
+                    seed=42,
+                    laplace=1.0,
+                    top_k=5,
+                )
+            self.assertTrue(model_path.exists())
+            label, _ = model.predict_text(rows[0][0])
+        self.assertEqual(label, "CRITICAL")
 
 
 if __name__ == "__main__":  # pragma: no cover - unittest discovery

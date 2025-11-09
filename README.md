@@ -2,6 +2,8 @@
 
 Multinomial Naive Bayes experiments for labelling CVE descriptions with the standard CVSS v3.1 severities (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`).
 
+> Mathematical derivations are being drafted in `docs/math.md` (very early notes).
+
 ## Data expectations
 
 - Input files can be CSV or JSON. Each record must expose a textual `description` and either a categorical `severity` or a numeric `cvss_score` (0–10).
@@ -37,6 +39,15 @@ Predicting uses a saved model:
 ```bash
 python3 features.py predict --model-path models/cve_nb.json "Buffer overflow in XYZ allows remote code execution"
 ```
+
+You can also fetch fresh CVEs from the NVD API and immediately train a model:
+
+```bash
+python3 features.py fetch-train --start-year 2023 --end-year 2023 --output data/cves_2023.csv \
+  --model-path models/cve_nb.json --api-key $NVD_KEY
+```
+
+This command shells out to the project’s `fetch_nvd` logic, respects the same rate-limit parameters, and then reuses the standard training pipeline.
 
 ## References
 
