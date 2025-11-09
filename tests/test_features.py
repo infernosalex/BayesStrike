@@ -154,5 +154,43 @@ class TrainingPipelineTests(unittest.TestCase):
         self.assertEqual(label, "CRITICAL")
 
 
+class EvaluationPipelineTests(unittest.TestCase):
+    def test_evaluate_existing_model_emits_report(self) -> None:
+        rows = [
+            ("Critical overflow allows code execution", "CRITICAL"),
+            ("High privilege escalation", "HIGH"),
+            ("Medium information disclosure", "MEDIUM"),
+            ("Low cosmetic typo", "LOW"),
+        ]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            data_path = Path(tmp_dir) / "eval.csv"
+            with data_path.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(["description", "severity"])
+                writer.writerows(rows)
+            model_path = Path(tmp_dir) / "model.json"
+            with redirect_stdout(io.StringIO()):
+                features.train_pipeline(
+                    data_path=data_path,
+                    model_path=model_path,
+                    seed=7,
+                    laplace=1.0,
+                    top_k=3,
+                )
+            report_path = Path(tmp_dir) / "report.json"
+            with redirect_stdout(io.StringIO()):
+                _, summary = features.evaluate_existing_model(
+                    model_path=model_path,
+                    data_path=data_path,
+                    report_path=report_path,
+                )
+
+            self.assertTrue(report_path.exists())
+            self.assertGreaterEqual(summary["accuracy"], 0.75)
+            persisted = json.loads(report_path.read_text(encoding="utf-8"))
+            self.assertEqual(persisted["total_records"], len(rows))
+            self.assertIn("confusion_matrix", persisted)
+
+
 if __name__ == "__main__":  # pragma: no cover - unittest discovery
     unittest.main()

@@ -426,6 +426,42 @@ def train_pipeline(
     return model
 
 
+def evaluate_existing_model(
+    model_path: Path,
+    data_path: Path,
+    *,
+    report_path: Optional[Path] = None,
+) -> Tuple[NaiveBayesModel, Dict[str, Any]]:
+    model = NaiveBayesModel.load(model_path)
+    records, total = load_dataset(data_path)
+    if not records:
+        raise ValueError(f"Dataset did not contain any usable CVE entries: {data_path}")
+    documents, skipped = build_documents(records)
+    print(
+        f"Loaded {len(documents)} evaluable CVEs out of {total} rows from {data_path}."
+    )
+    if skipped:
+        print(f"Skipped {skipped} entries with empty vocab after preprocessing.")
+    accuracy, metrics, confusion = evaluate_model(model, documents)
+    summary: Dict[str, Any] = {
+        "accuracy": accuracy,
+        "metrics": metrics,
+        "confusion_matrix": confusion,
+        "total_records": total,
+        "evaluated_documents": len(documents),
+        "skipped_documents": skipped,
+        "model_path": str(model_path),
+        "data_path": str(data_path),
+    }
+    if report_path:
+        report_path = report_path.expanduser()
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        with report_path.open("w", encoding="utf-8") as handle:
+            json.dump(summary, handle, indent=2)
+        print(f"\nEvaluation report written to {report_path}")
+    return model, summary
+
+
 def handle_train(args: argparse.Namespace) -> None:
     try:
         train_pipeline(
@@ -471,6 +507,21 @@ def handle_fetch_train(args: argparse.Namespace) -> None:
         laplace=args.laplace,
         top_k=args.top_k,
     )
+
+
+def handle_evaluate(args: argparse.Namespace) -> None:
+    report_path = Path(args.report_path) if args.report_path else None
+    try:
+        model, summary = evaluate_existing_model(
+            model_path=Path(args.model_path),
+            data_path=Path(args.data),
+            report_path=report_path,
+        )
+    except Exception as exc:
+        raise SystemExit(str(exc))
+
+    print_metrics(summary["accuracy"], summary["metrics"], summary["confusion_matrix"])
+    print_top_words(model, top_k=args.top_k)
 
 
 def handle_predict(args: argparse.Namespace) -> None:
@@ -524,6 +575,28 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Path to a trained model JSON file.",
     )
     predict_parser.set_defaults(func=handle_predict)
+
+    evaluate_parser = subparsers.add_parser(
+        "evaluate",
+        help="Evaluate an existing model against a labeled dataset without retraining.",
+    )
+    evaluate_parser.add_argument("--data", required=True, help="Path to CSV or JSON dataset.")
+    evaluate_parser.add_argument(
+        "--model-path",
+        default="models/cve_nb.json",
+        help="Path to the trained model JSON file.",
+    )
+    evaluate_parser.add_argument(
+        "--report-path",
+        help="Optional path to persist metrics/confusion matrix as JSON.",
+    )
+    evaluate_parser.add_argument(
+        "--top-k",
+        type=int,
+        default=DEFAULT_TOP_K,
+        help="How many indicative tokens to print per class.",
+    )
+    evaluate_parser.set_defaults(func=handle_evaluate)
 
     fetch_train_parser = subparsers.add_parser(
         "fetch-train",

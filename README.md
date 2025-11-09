@@ -1,5 +1,7 @@
 # BayesStrike
 
+![BayesStrike logo](logo.png)
+
 Multinomial Naive Bayes experiments for labelling CVE descriptions with the standard CVSS v3.1 severities (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`).
 
 > Mathematical derivations are being drafted in `docs/math.md` (very early notes).
@@ -38,6 +40,12 @@ Predicting uses a saved model:
 
 ```bash
 python3 features.py predict --model-path models/cve_nb.json "Buffer overflow in XYZ allows remote code execution"
+```
+
+Evaluating an existing model against a labeled dataset without retraining:
+
+```bash
+python3 features.py evaluate --data data/cves.csv --model-path models/cve_nb.json --report-path reports/latest.json
 ```
 
 You can also fetch fresh CVEs from the NVD API and immediately train a model:
