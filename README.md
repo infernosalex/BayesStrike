@@ -1,6 +1,6 @@
 # BayesStrike
 
-![BayesStrike logo](logo.png)
+<img src="logo.png" alt="BayesStrike logo" width="128" height="128" />
 
 Multinomial Naive Bayes experiments for labelling CVE descriptions with the standard CVSS v3.1 severities (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`).
 

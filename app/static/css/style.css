@@ -44,8 +44,21 @@ span {
 
 textarea.form-control,
 input.form-control {
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.25);
   color: #fff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.form-control:focus,
+.form-control:active {
+  background: rgba(15, 25, 45, 0.85) !important;
+  color: #fff !important;
+  border-color: rgba(0, 198, 255, 0.8);
+  box-shadow: 0 0 0 0.15rem rgba(0, 198, 255, 0.35);
+}
+
+.form-control::placeholder {
+  color: rgba(255, 255, 255, 0.75) !important;
 }
 
 textarea::placeholder,
