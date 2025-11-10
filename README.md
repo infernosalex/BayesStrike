@@ -48,6 +48,17 @@ Evaluating an existing model against a labeled dataset without retraining:
 python3 features.py evaluate --data data/cves.csv --model-path models/cve_nb.json --report-path reports/latest.json
 ```
 
+### Web dashboard
+
+A tiny Flask UI (in `app/`) lets you upload datasets, trigger training/evaluation, and classify descriptions with the `logo.png` branding. To try it:
+
+```bash
+python3 features.py train --data data/sample_cves.csv --model-path models/web_demo.json  # or your dataset
+python3 run_web.py  # serves at http://127.0.0.1:5000
+```
+
+The server uses Bootstrap with a glassmorphism theme, displays predictions plus per-class log probabilities, and allows downloading JSON evaluation reports.
+
 You can also fetch fresh CVEs from the NVD API and immediately train a model:
 
 ```bash

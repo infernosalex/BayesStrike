@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row g-4 align-items-stretch">
+  <div class="col-lg-6 d-flex">
+    <div class="card glass h-100 flex-fill">
+      <div class="card-body">
+        <h5 class="card-title">Predict Severity</h5>
+        <form method="post" action="{{ url_for('predict') }}">
+          <div class="mb-3">
+            <label class="form-label" for="description">CVE description</label>
+            <textarea class="form-control" id="description" name="description" rows="9" placeholder="Paste CVE description here...">{{ input_text or '' }}</textarea>
+          </div>
+          <button type="submit" class="btn btn-primary">Classify</button>
+        </form>
+        {% if prediction %}
+          <hr />
+          <h6>Prediction</h6>
+          <p class="display-6 text-info">{{ prediction }}</p>
+          {% if scores %}
+            <ul class="list-group list-group-flush">
+              {% for cls, value in scores.items() %}
+                <li class="list-group-item d-flex justify-content-between">
+                  <span>{{ cls }}</span>
+                  <span class="badge bg-secondary">{{ value }}</span>
+                </li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6 d-flex flex-column gap-4">
+    <div class="card glass">
+      <div class="card-body">
+        <h5 class="card-title">Train Model</h5>
+        <form method="post" action="{{ url_for('train') }}" enctype="multipart/form-data">
+          <div class="mb-3">
+            <label class="form-label" for="datasetTrain">Dataset (CSV/JSON)</label>
+            <input class="form-control" type="file" id="datasetTrain" name="dataset" accept=".csv,.json" required />
+          </div>
+          <button type="submit" class="btn btn-success">Train</button>
+        </form>
+      </div>
+    </div>
+    <div class="card glass">
+      <div class="card-body">
+        <h5 class="card-title">Evaluate Model</h5>
+        <form method="post" action="{{ url_for('evaluate') }}" enctype="multipart/form-data">
+          <div class="mb-3">
+            <label class="form-label" for="datasetEval">Dataset (CSV/JSON)</label>
+            <input class="form-control" type="file" id="datasetEval" name="dataset" accept=".csv,.json" required />
+          </div>
+          <button type="submit" class="btn btn-warning">Evaluate</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

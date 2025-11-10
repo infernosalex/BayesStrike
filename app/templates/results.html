@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="card glass">
+  <div class="card-body">
+    <h5 class="card-title">Evaluation Summary</h5>
+    <p>Accuracy: <strong>{{ summary.accuracy }}</strong></p>
+    <div class="row">
+      <div class="col-md-6">
+        <h6>Per-class Metrics</h6>
+        <ul class="list-group list-group-flush">
+          {% for cls, stats in summary.metrics.items() %}
+            <li class="list-group-item bg-transparent text-light">
+              <strong>{{ cls }}</strong><br />
+              Precision: {{ stats.precision }} | Recall: {{ stats.recall }} | F1: {{ stats.f1 }}
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div class="col-md-6">
+        <h6>Dataset Stats</h6>
+        <p>Total records: {{ summary.total_records }}</p>
+        <p>Evaluated docs: {{ summary.evaluated_documents }}</p>
+        <p>Skipped docs: {{ summary.skipped_documents }}</p>
+        {% if report_path %}
+          <a class="btn btn-outline-info" href="{{ url_for('download_report', filename=report_path) }}">Download JSON report</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

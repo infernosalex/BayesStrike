@@ -1,0 +1,86 @@
+body {
+  background: radial-gradient(circle at top, rgba(10, 25, 47, 0.9), #050910 80%);
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #f8fbff;
+}
+
+.card,
+.card-body,
+.card-title,
+.navbar-text,
+label,
+.form-label,
+.form-control,
+textarea,
+input,
+button,
+.list-group-item,
+.btn,
+p,
+h5,
+h6,
+li,
+span {
+  color: #f8fbff !important;
+}
+
+.navbar-brand .logo {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+}
+
+.card.glass {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.card-title {
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+textarea.form-control,
+input.form-control {
+  background: rgba(0, 0, 0, 0.2);
+  color: #fff;
+}
+
+textarea::placeholder,
+textarea::-webkit-input-placeholder,
+textarea::-moz-placeholder,
+textarea:-ms-input-placeholder {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.list-group-item {
+  background: rgba(0, 0, 0, 0.2);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+.btn-primary,
+.btn-success,
+.btn-warning {
+  border: none;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #007bff, #00c6ff);
+}
+
+.btn-success {
+  background: linear-gradient(135deg, #00d2a0, #0d8f6f);
+}
+
+.btn-warning {
+  background: linear-gradient(135deg, #f5a623, #f76b1c);
+  color: #1b1b1b;
+}
+
+.alert {
+  border-radius: 0.75rem;
+  border: none;
+}
