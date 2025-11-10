@@ -1,0 +1,128 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[romanian]{babel}
+\usepackage{amsmath, amssymb}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\geometry{margin=2.5cm}
+
+\title{BayesStrike -- Notițe Matematice și Documentație (RO)}
+\author{Proiect individual: Clasificator Bayes multinomial}
+\date{Noiembrie 2025}
+
+\begin{document}
+\maketitle
+
+\section{Introducere}
+BayesStrike implementează un clasificator multinomial Naive Bayes pentru descrierile CVE (Common Vulnerabilities and Exposures). Scopul este etichetarea automată a descrierilor textuale în categoriile oficiale CVSS v3.1: \textbf{LOW}, \textbf{MEDIUM}, \textbf{HIGH}, \textbf{CRITICAL}. Documentul de față explică fiecare concept matematic pornind de la principii elementare: probabilități condiționate, presupunerea de independență „naive”, estimarea parametrilor pe baza datelor și modul în care aceste elemente se transformă în cod.
+
+\subsection{Terminologie de bază}
+\begin{itemize}[noitemsep]
+    \item \textbf{Spațiul de etichete} $\mathcal{Y}$: mulțimea celor patru severități.
+    \item \textbf{Vocabular} $V$: totalitatea token-urilor (cuvintelor) întâlnite după preprocesare.
+    \item \textbf{Document} $d$: o descriere CVE, reprezentată ca vector de frecvențe $\mathbf{c}$.
+    \item \textbf{Exemplu}\,: perechea $(d, y)$ formată din descriere și eticheta ei reală.
+\end{itemize}
+
+\section{Set de date și preprocesare}
+Prelucrarea datelor este esențială pentru ca ipotezele modelului să fie cât mai aproape de realitate.
+\begin{enumerate}[noitemsep]
+    \item \textbf{Încărcare}: \texttt{features.load\_dataset} acceptă fișiere CSV (citite cu \texttt{DictReader}) și JSON (listă sau obiect cu cheie \texttt{records}). Fiecare element este normalizat într-o structură \texttt{(description, severity)}.
+    \item \textbf{Maparea scorului} $s$: funcția \texttt{severity\_from\_score} aplică direct pragurile oficiale CVSS v3.1. Această mapare este justificată deoarece scorul numeric descrie același fenomen ca și eticheta discretă.
+    \item \textbf{Tokenizare}: definiția formală este $\text{tokenize}(t) = \text{regex}\_{\text{/}[a-z0-9]+/}(t_{lower})$. Se elimină orice caracter nealfanumeric, lăsând doar secvențe consecutive.
+    \item \textbf{Stopword-uri}: mulțimea fixă $S$ este folosită pentru a elimina termeni foarte frecvenți care nu contribuie la discriminare. Setul este stocat explicit în cod.
+    \item \textbf{Filtrarea documentelor goale}: dacă \texttt{preprocess\_text} întoarce lista vidă, documentul este ignorat, iar contorul „skipped” este afișat utilizatorului.
+    \item \textbf{Împărțire stratificată}: \texttt{stratified\_split} menține proporția fiecărei clase. Pentru fiecare bucket $B_y$ se realizează \texttt{shuffle} determinist și se aleg primele $\lfloor 0.8 \cdot |B_y| \rfloor$ exemple pentru antrenare.
+\end{enumerate}
+
+\section{Modelul multinomial Naive Bayes}
+\subsection{Probabilitate totală și Bayes}
+Pentru a calcula probabilitatea ca un document $d$ să aparțină clasei $y$, plecăm de la formula lui Bayes:
+\begin{equation}
+P(y \mid d) = \frac{P(d \mid y) P(y)}{P(d)} = \frac{P(d \mid y) P(y)}{\sum_{y' \in \mathcal{Y}} P(d \mid y') P(y')}.
+\end{equation}
+În practică, este suficientă comparația numerelor de la numărător, deoarece \smash{$P(d)$} este comun tuturor claselor.
+
+\subsection{Ipoteza „naivă”}
+Modelul presupune că toate token-urile $w_i$ sunt condițional independente între ele odată ce clasa $y$ este cunoscută. Astfel, dacă documentul conține $c_i$ apariții ale token-ului $w_i$, distribuția multinomială ne dă
+\begin{equation}
+P(d \mid y) = \frac{\left(\sum_i c_i\right)!}{\prod_i c_i!} \prod_{i=1}^{|V|} P(w_i \mid y)^{c_i}.
+\end{equation}
+Factorul combinatorial este identic pentru toate clasele, așa că îl putem ignora în comparație.
+
+\subsection{Reprezentare vectorială}
+Fie $\mathbf{c} = (c_1, \dots, c_{|V|})$ vectorul de frecvențe. Pentru eficiență, în implementare se folosește un \texttt{Counter} doar pe token-urile care apar efectiv, reducând complexitatea la numărul de cuvinte distincte din document.
+
+\subsection{Probabilități a priori}
+Numărul documentelor din clasă $y$ este $N_y$, iar numărul total $N$. Prioriul este regularizat cu \emph{add-one}:
+\begin{equation}
+P(y) = \frac{N_y + \alpha_0}{N + \alpha_0 |\mathcal{Y}|}, \quad \alpha_0 = 1.
+\end{equation}
+
+\subsection{Probabilități condiționate și netezire}
+Numărul aparițiilor token-ului $w_i$ în clasa $y$ este $C_{y,i}$. Estimatorul maxim de verosimilitate ar fi $C_{y,i}/\sum_j C_{y,j}$, dar acesta devine zero pentru cuvinte neobservate. Pentru a evita log-probabilități $-\infty$, folosim netezirea Laplace (adăugăm un „pseudocount” $\alpha$ peste tot):
+\begin{equation}
+P(w_i \mid y) = \frac{C_{y,i} + \alpha}{\sum_j C_{y,j} + \alpha |V|}, \quad \alpha = 1.
+\end{equation}
+Termenul $\alpha |V|$ din numitor poate fi interpretat ca o distribuție Dirichlet uniformă \emph{a priori} asupra vocabularului.
+
+\subsection{Clasificare}
+Scorul logaritmic pentru un document este:
+\begin{equation}
+\log P(y \mid \mathbf{c}) \propto \log P(y) + \sum_{i=1}^{|V|} c_i \log P(w_i \mid y).
+\end{equation}
+Predicția finală este $\hat{y} = \arg\max_y \log P(y \mid \mathbf{c})$. Pentru stabilitate numerică, codul lucrează integral în spațiul logaritmic.
+
+\section{Învățare și evaluare}
+\subsection{Estimarea parametrilor}
+\begin{enumerate}[noitemsep]
+    \item \textbf{Vocabularul}: \texttt{build\_vocabulary\_terms} parcurge fiecare document și inserează token-urile într-o mapare ordonată.
+    \item \textbf{Numărătoare de documente}: \texttt{class\_doc\_counts[y]} memorează $N_y$.
+    \item \textbf{Numărătoare de cuvinte}: matricea \texttt{class\_word\_counts[y][i]} furnizează $C_{y,i}$.
+    \item \textbf{Log-likelihood}: se precomputează $\log P(w_i \mid y)$ pentru a accelera predicțiile.
+\end{enumerate}
+
+\subsection{Măsuri de performanță}
+\begin{itemize}[noitemsep]
+    \item \textbf{Acuratețe}: $\text{acc} = \frac{\sum_y M_{y,y}}{\sum_{i,j} M_{i,j}}$.
+    \item \textbf{Precizie}: $\text{prec}_y = \frac{M_{y,y}}{\sum_{i} M_{i,y}}$.
+    \item \textbf{Recall}: $\text{rec}_y = \frac{M_{y,y}}{\sum_{j} M_{y,j}}$.
+    \item \textbf{F1}: $\text{F1}_y = 2 \cdot \frac{\text{prec}_y \cdot \text{rec}_y}{\text{prec}_y + \text{rec}_y}$.
+\end{itemize}
+Implementarea \texttt{evaluate\_model} întoarce toate aceste valori și este folosită atât în CLI, cât și în dashboard-ul Flask.
+
+\subsection{Exemplu numeric}
+Presupunem că avem 100 de documente, dintre care 30 sunt HIGH. Atunci $P(\text{HIGH}) = (30 + 1)/(100 + 4) \approx 0.297$. Dacă token-ul „overflow” apare de 120 ori în clasa HIGH și suma frecvențelor tuturor token-urilor din HIGH este 10 000, atunci
+\begin{equation*}
+P(\text{overflow} \mid \text{HIGH}) = \frac{120 + 1}{10\,000 + 1 \cdot |V|}.
+\end{equation*}
+Probabilitatea logaritmică este folosită pentru combinarea cu restul token-urilor.
+
+\section{Structura codului}
+\begin{itemize}[noitemsep]
+    \item \textbf{\texttt{features.py}}: funcții principale (încărcare date, preprocesare, \texttt{train\_pipeline}, \texttt{evaluate\_existing\_model}, \texttt{NaiveBayesModel}). Include subcomenzi CLI: \texttt{train}, \texttt{predict}, \texttt{evaluate}, \texttt{fetch-train}.
+    \item \textbf{\texttt{fetch\_nvd.py}}: client NVD 2.0, reutilizat direct de \texttt{features.py fetch-train}.
+    \item \textbf{\texttt{app/}}: interfață Flask cu pagini Bootstrap pentru clasificare, antrenare și evaluare (folosește \texttt{run\_web.py}).
+    \item \textbf{\texttt{tests/}}: baterie \texttt{unittest} ce acoperă încărcarea datelor, preprocesarea, pipeline-ul de antrenare și salvarea rapoartelor.
+\end{itemize}
+
+\section{Instrucțiuni de utilizare}
+\begin{enumerate}[noitemsep]
+    \item \textbf{Pregătire date}: rulați \texttt{python3 fetch\_nvd.py --start-year 2022 --end-year 2022 --output data/cves.csv} sau pregătiți un CSV manual.
+    \item \textbf{Antrenare CLI}: \verb|python3 features.py train --data data/cves.csv --model-path models/cve_nb.json|.
+    \item \textbf{Predicție CLI}: \verb|python3 features.py predict --model-path models/cve_nb.json "Buffer overflow..."|. Comanda afișează eticheta și log-probabilitățile.
+    \item \textbf{Evaluare CLI}: \verb|python3 features.py evaluate --data data/cves.csv --model-path models/cve_nb.json --report-path reports/out.json|. Fișierul JSON conține toate metricele.
+    \item \textbf{Fetch + train}: \verb|python3 features.py fetch-train --start-year 2023 --end-year 2023 --output data/cves_2023.csv --api-key ...|. Acest pas automatizează întregul flux.
+    \item \textbf{Interfață web}: după ce există un model, rulați \verb|python3 run_web.py| și lucrați din browser.
+\end{enumerate}
+
+\section{Referințe}
+\begin{enumerate}[label=\textbf{[R\arabic*]}]
+    \item National Vulnerability Database API 2.0, \url{https://nvd.nist.gov/developers/vulnerabilities}.
+    \item FIRST, \emph{Common Vulnerability Scoring System v3.1 Specification Document}, 2019.
+    \item T. M. Mitchell, \emph{Machine Learning}, McGraw--Hill, 1997.
+\end{enumerate}
+
+\end{document}

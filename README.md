@@ -4,7 +4,7 @@
 
 Multinomial Naive Bayes experiments for labelling CVE descriptions with the standard CVSS v3.1 severities (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`).
 
-> Mathematical derivations are being drafted in `docs/math.md` (very early notes).
+> Documentația matematică în format LaTeX este disponibilă în `docs/math_ro.tex` (versiune RO).
 
 ## Data expectations
 
