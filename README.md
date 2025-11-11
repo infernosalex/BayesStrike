@@ -1,10 +1,15 @@
 # BayesStrike
 
-<img src="logo.png" alt="BayesStrike logo" width="128" height="128" />
-
+<p align="center">
+  <img src="logo.png" alt="BayesStrike logo" width="250" height="250" style="border-radius: 50%;">
+  <br>
+  <a href="https://github.com/infernosalex/BayesStrike/">
+    <img src="https://img.shields.io/badge/GitHub-181717?style=flat&logo=github&logoColor=white" alt="GitHub">
+  </a>
+</p>
 Multinomial Naive Bayes experiments for labelling CVE descriptions with the standard CVSS v3.1 severities (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`).
 
-> Documentația matematică în format LaTeX este disponibilă în `docs/math_ro.tex` (versiune RO).
+> 🇷🇴 Documentația matematică în format LaTeX este disponibilă în `docs/math_ro.tex` (versiune RO).
 
 ## Data expectations
 
