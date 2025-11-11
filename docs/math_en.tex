@@ -1,0 +1,124 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage{amsmath, amssymb}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\geometry{margin=2.5cm}
+
+\title{BayesStrike -- Mathematical Notes and Usage Guide (EN)}
+\author{Multinomial Naive Bayes Classifier for CVE Descriptions}
+\date{November 2025}
+
+\begin{document}
+\maketitle
+
+\section{Overview}
+BayesStrike implements a multinomial Naive Bayes classifier that assigns CVE descriptions to the four CVSS v3.1 severity levels (LOW, MEDIUM, HIGH, CRITICAL). The project delivers command-line tooling, a Flask dashboard, and reusable Python APIs. This document builds the mathematics from first principles, detailing probability identities, the impact of the ``naive'' assumption, parameter estimation, evaluation metrics, and how every component maps to the code base.
+
+\subsection{Basic terminology}
+\begin{itemize}[noitemsep]
+    \item \textbf{Label space} $\mathcal{Y}$: \{LOW, MEDIUM, HIGH, CRITICAL\}.
+    \item \textbf{Vocabulary} $V$: the set of all unique tokens extracted after preprocessing.
+    \item \textbf{Document} $d$: a CVE description, represented by a bag-of-words count vector $\mathbf{c}$.
+    \item \textbf{Training sample}: a pair $(d, y)$ consisting of the document and its ground-truth severity.
+\end{itemize}
+
+\section{Dataset and preprocessing}
+\begin{enumerate}[noitemsep]
+    \item \textbf{Loading}: \texttt{features.load\_dataset} accepts CSV and JSON sources, normalising keys to lower case before extracting \texttt{description} + label/score.
+    \item \textbf{Severity mapping}: the helper \texttt{severity\_from\_score} applies the official CVSS brackets; this is a deterministic function from score to label.
+    \item \textbf{Tokenisation}: defined as $\text{tokenize}(t) = \text{regex}_{[a-z0-9]+}(t_{\text{lower}})$, removing punctuation and splitting on whitespace implicitly.
+    \item \textbf{Stopword removal}: the constant set $S$ (common determiners, auxiliaries, etc.) is subtracted from each token list, leaving only discriminative terms.
+    \item \textbf{Empty documents}: if the filtered list is empty, the entry is discarded and counted in the ``skipped'' total to inform the user about data quality.
+    \item \textbf{Stratified split}: \texttt{stratified\_split} preserves the class proportions by shuffling each severity bucket independently (seeded RNG) and slicing 80\% for training.
+\end{enumerate}
+
+\section{Multinomial Naive Bayes model}
+\subsection{Bayes rule}
+To compute the posterior probability that a document $d$ belongs to class $y$ we start with Bayes rule:
+\begin{equation}
+P(y \mid d) = \frac{P(d \mid y) P(y)}{P(d)} = \frac{P(d \mid y) P(y)}{\sum_{y' \in \mathcal{Y}} P(d \mid y') P(y')}.
+\end{equation}
+Because $P(d)$ is a constant factor for all classes, we only need to compare the numerators.
+
+\subsection{Naive conditional independence}
+The multinomial Naive Bayes assumption treats all tokens as conditionally independent given the class. If $c_i$ denotes the count of token $w_i$, the likelihood of observing the document given class $y$ is
+\begin{equation}
+P(d \mid y) = \frac{(\sum_i c_i)!}{\prod_i c_i!} \prod_{i=1}^{|V|} P(w_i \mid y)^{c_i}.
+\end{equation}
+The combinatorial coefficient is identical across all classes and is therefore omitted during comparison.
+
+\subsection{Prior probabilities}
+If $N_y$ documents belong to class $y$ and $N$ is the total, the add-one prior is
+\begin{equation}
+P(y) = \frac{N_y + \alpha_0}{N + \alpha_0 |\mathcal{Y}|}, \qquad \alpha_0 = 1.
+\end{equation}
+
+\subsection{Conditional probabilities and smoothing}
+The maximum-likelihood estimator would be $C_{y,i} / \sum_j C_{y,j}$, where $C_{y,i}$ counts occurrences of token $w_i$ in class $y$. To avoid zero probabilities for unseen words we add Laplace smoothing:
+\begin{equation}
+P(w_i \mid y) = \frac{C_{y,i} + \alpha}{\sum_j C_{y,j} + \alpha |V|}, \qquad \alpha = 1.
+\end{equation}
+This is equivalent to placing a uniform Dirichlet prior over the vocabulary.
+
+\subsection{Classification rule}
+The decision score is computed in log-space to avoid underflow:
+\begin{equation}
+\log P(y \mid \mathbf{c}) \propto \log P(y) + \sum_{i=1}^{|V|} c_i \log P(w_i \mid y),
+\end{equation}
+and the prediction is $\hat{y} = \arg\max_y \log P(y \mid \mathbf{c})$.
+
+\section{Learning and evaluation pipeline}
+\subsection{Parameter estimation}
+\begin{enumerate}[noitemsep]
+    \item \textbf{Vocabulary}: \texttt{build\_vocabulary\_terms} iterates through every preprocessed document and appends unseen tokens to a list, preserving insertion order.
+    \item \textbf{Document counts}: \texttt{class\_doc\_counts[y]} stores $N_y$.
+    \item \textbf{Token counts}: \texttt{class\_word\_counts[y][i]} stores $C_{y,i}$.
+    \item \textbf{Log probabilities}: \texttt{class\_log\_likelihoods} contains $\log P(w_i \mid y)$ for constant-time lookup during prediction.
+\end{enumerate}
+
+\subsection{Evaluation metrics}
+Let $M$ denote the confusion matrix, where $M_{y, \hat{y}}$ counts how many documents of true class $y$ were predicted as $\hat{y}$. The metrics used are
+\begin{align*}
+\text{accuracy} &= \frac{\sum_y M_{y,y}}{\sum_{i,j} M_{i,j}}, \\
+\text{precision}_y &= \frac{M_{y,y}}{\sum_i M_{i,y}}, \\
+\text{recall}_y &= \frac{M_{y,y}}{\sum_j M_{y,j}}, \\
+\text{F1}_y &= 2 \cdot \frac{\text{precision}_y \cdot \text{recall}_y}{\text{precision}_y + \text{recall}_y}.
+\end{align*}
+
+\subsection{Worked numeric example}
+Suppose the dataset contains $N = 150$ documents, of which $40$ are HIGH. The prior is $P(\text{HIGH}) = (40 + 1)/(150 + 4) \approx 0.26$. If the token ``overflow'' appears $200$ times among HIGH documents and the total number of tokens for that class is $12{,}000$, then
+\begin{equation*}
+P(\text{overflow} \mid \text{HIGH}) = \frac{200 + 1}{12\,000 + 1 \cdot |V|}.
+\end{equation*}
+Log-probabilities accumulate additively for every token in a new document.
+
+\section{Code structure}
+\begin{itemize}[noitemsep]
+    \item \textbf{\texttt{features.py}}: core library exposing data loading, preprocessing, training, evaluation, and the \texttt{NaiveBayesModel} dataclass. Provides the CLI commands \texttt{train}, \texttt{predict}, \texttt{evaluate}, and \texttt{fetch-train}.
+    \item \textbf{\texttt{fetch\_nvd.py}}: reusable NVD client that downloads CVEs into CSV files; reused by the CLI.
+    \item \textbf{\texttt{app/}}: Flask application (Bootstrap UI) enabling uploads, training, evaluation, and free-text predictions; launched via \texttt{run\_web.py}.
+    \item \textbf{\texttt{tests/}}: \texttt{unittest} suite verifying severity mapping, preprocessing pipeline, stratified splitting, training/evaluation helpers, and JSON report generation.
+\end{itemize}
+
+\section{Usage instructions}
+\begin{enumerate}[noitemsep]
+    \item \textbf{Collect data}: run \texttt{python3 fetch\_nvd.py --start-year 2022 --end-year 2022 --output data/cves.csv} or assemble your own CSV/JSON.
+    \item \textbf{Train}: \verb|python3 features.py train --data data/cves.csv --model-path models/cve_nb.json|.
+    \item \textbf{Predict}: \verb|python3 features.py predict --model-path models/cve_nb.json "Buffer overflow..."|.
+    \item \textbf{Evaluate}: \verb|python3 features.py evaluate --data data/cves.csv --model-path models/cve_nb.json --report-path reports/out.json|.
+    \item \textbf{Fetch + train}: \verb|python3 features.py fetch-train --start-year 2023 --end-year 2023 --output data/cves_2023.csv --api-key ...|.
+    \item \textbf{Web dashboard}: after training, run \verb|python3 run_web.py| and interact with the Flask UI.
+\end{enumerate}
+
+\section{References}
+\begin{enumerate}[label=\textbf{[R\arabic*]}]
+    \item National Vulnerability Database API 2.0: \url{https://nvd.nist.gov/developers/vulnerabilities}.
+    \item FIRST. \emph{Common Vulnerability Scoring System v3.1 Specification Document}, 2019.
+    \item T. M. Mitchell. \emph{Machine Learning}. McGraw--Hill, 1997.
+\end{enumerate}
+
+\end{document}
